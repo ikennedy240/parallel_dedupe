@@ -4,7 +4,7 @@ library(glue)
 args <- commandArgs(trailingOnly=TRUE)
 in_path <- args[1]
 
-df <- fread(in_path, nrows = n_rows)
+df <- fread(in_path)
 cbsas <- unique(df$cbsafp)
 # loops through CBSAs
 for(focal_cbsa in cbsas){
@@ -25,7 +25,7 @@ for(focal_cbsa in cbsas){
   file.copy('base_submit.slurm', slurm_path, overwrite = TRUE)
   # modifies it for the current CBSA
   slurm_lines <- glue('Rscript parallel_dedupe.R {cbsa_in_path} {cbsa_out_path} .7 >> dedupe_log_{focal_cbsa}.txt\n\nexit 0')
-  write_lines(slurm_lines, slurm_path, append = TRUE)
+  writeLines(slurm_lines, slurm_path, append = TRUE)
   # submits it to the slurm queue
   system(glue('sbatch {slurm_path}'))
 }
