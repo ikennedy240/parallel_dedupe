@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
-
+print(Sys.time())
 suppressWarnings(library(parallel))
-suppressWarnings(library(stringdist, lib.loc = '/gscratch/stf/ikennedy/rpackages'))
-suppressWarnings(library(data.table, lib.loc = '/gscratch/stf/ikennedy/rpackages'))
-suppressWarnings(library(glue, lib.loc = '/gscratch/stf/ikennedy/rpackages'))
+suppressWarnings(library(stringdist))
+suppressWarnings(library(data.table))
+suppressWarnings(library(glue))
 ## laod data
 args <-  commandArgs(trailingOnly=TRUE)
 if(length(args)<2){
@@ -29,10 +29,6 @@ cat(glue("Reading file from {in_path}\nWriting file to {out_path}\nUsing thresho
 cat('\n\nREADING DATA\n')
 df <- fread(in_path, nrows = n_rows)
 
-if(!('status' %in% names(df))){
-   df$status <- 'unchecked'
-}
-
 ## function that calcs jaccard with all
 jaccard_parallel <- function(i, texts, thresh){
   # gets the dupes
@@ -52,22 +48,28 @@ deduped_list <- function(i, results){
   }
   return(TRUE)
 }
-
-cbsas <- unique(df[df$status == 'unchecked']$cbsa)
-cat(glue("\nDetected {length(cbsas)} processing separately\n\n"))
-
-for(focal_cbsa in cbsas){
-  df_cbsa <- df[df$cbsa == focal_cbsa]
-  df_cbsa <- df_cbsa[order(listing_date),]
-  df <- df[df$cbsa != focal_cbsa]
-  cat(glue('\n\nRUNNING DEDPULICATION ON {nrow(df_cbsa)} rows from {focal_cbsa}\n'))
-  texts <- df_cbsa$dupeText
+cat(glue('\n\nRUNNING ADDRESS DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
+deduped_df <- data.table()
+addresses <- df %>% count(geo_address) %>% filter(n>10, !is.na(geo_address)) %>% pull(geo_address) 
+for(focal_address in addresses){
+  system.time({
+  addr_df <- df[geo_address == focal_address]
+  cat(glue('\n\nRUNNING DEDPULICATION ON {nrow(addr_df)} rows from {focal_address}\n\n'))
+  texts <- addr_df$dupeText
   results <- mclapply(1:length(texts), jaccard_parallel, texts = texts, thresh = thresh)
-  cat('\n\nPROCESSING RESULTS\n')
-  keep_list <- sapply(1:length(results), deduped_list, results = results)
-  df <- rbind(df,df_cbsa[keep_list])
-  cat(glue("\nProcessing complete, sucessfully dropped {length(keep_list)-sum(keep_list)} rows\n\n WRITING FILE"))
-  fwrite(df, out_path)
+  keep_list <- mclapply(1:length(results), deduped_list, results = results)
+  keep_list <- unlist(keep_list)
+  deduped_df <- rbind(deduped_df, addr_df[keep_list])})
 }
 
+cat(glue('\n\nRUNNING FULL DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
+texts <- df$dupeText
+results <- mclapply(1:length(texts), jaccard_parallel, texts = texts, thresh = thresh)
+cat('\n\nPROCESSING RESULTS\n')
+keep_list <- sapply(1:length(results), deduped_list, results = results)
+
+
+cat(glue("\nProcessing complete, sucessfully dropped {length(keep_list)-sum(keep_list)} rows\n\n WRITING FILE"))
+fwrite(df, out_path)
 cat("\n\nFILE WRITE COMPLETE\n")
+print(Sys.time())
