@@ -82,6 +82,7 @@ recursive_dedupe <- function(df, thresh, cutoff = 500, tmp_file = 'tmp/tmp.csv')
   return(df)
 }
 
+cbsa <- unique(df$cbsa)
 cat(glue('\n\nRUNNING ADDRESS DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
 deduped_df <- data.table()
 addresses <- df[, .N, by=.(geo_address)]
