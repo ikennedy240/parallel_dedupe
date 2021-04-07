@@ -48,6 +48,40 @@ deduped_list <- function(i, results){
   }
   return(TRUE)
 }
+
+recursive_dedupe <- function(df, thresh, cutoff = 500, tmp_file = 'tmp/tmp.csv'){
+  # as long as the df is bigger than cutoff, process in chunks
+  while(nrow(df)>cutoff){
+    print(glue('RUNNING RECURSIVELY: DF HAS {nrow(df)} ROWS AND CUTOFF IS {cutoff}'))
+    # grab the first -cutoff- rows of df
+    to_run <- head(df, cutoff)
+    # run the dedupe on that
+    short_df <- recursive_dedupe(to_run, thresh)
+    print(glue("SHORT DF SIZE IS {nrow(short_df)}"))
+    # if the deduped one is close to the cutoff, save it for now
+    if(nrow(short_df)>=(cutoff-2)){
+      print("SHORT DF IS BLOATED, WRITING TO FILE")
+      fwrite(short_df, tmp_file, append = TRUE)
+      # then df just loses cutoff rows
+      df <- df[cutoff:nrow(df)]
+    } else { #otherwise cutoff the top of df and add short_df on
+      df <- rbind(short_df, df[cutoff:nrow(df)])
+    }
+  }
+  texts <- df$dupeText
+  results<- mclapply(1:length(texts), jaccard_parallel, texts = texts, thresh = thresh)
+  keep_list <- mclapply(1:length(results), deduped_list, results = results)
+  keep_list <- unlist(keep_list)
+  df <- df[keep_list]
+  # if we had saved a short df of deduped stuff, now bind it back on
+  if(exists('short_df') & file.exists(tmp_file)){
+    print("RELOADING SHORT DF TO RETURN")
+    df <- rbind(df, fread(tmp_file))
+    file.remove(tmp_file)
+  }
+  return(df)
+}
+
 cat(glue('\n\nRUNNING ADDRESS DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
 deduped_df <- data.table()
 addresses <- df[, .N, by=.(geo_address)]
@@ -56,21 +90,27 @@ addresses <- addresses[N>10 & !is.na(geo_address)]$geo_address
 for(focal_address in addresses){
   addr_df <- df[geo_address == focal_address]
   cat(glue('\n\nRUNNING DEDPULICATION ON {nrow(addr_df)} rows from {focal_address}\n\n'))
-  texts <- addr_df$dupeText
-  results <- mclapply(1:length(texts), jaccard_parallel, texts = texts, thresh = thresh)
-  keep_list <- mclapply(1:length(results), deduped_list, results = results)
-  keep_list <- unlist(keep_list)
-  deduped_df <- rbind(deduped_df, addr_df[keep_list])
+  to_add <- recursive_dedupe(addr_df, thresh)
+  deduped_df <- rbind(deduped_df, to_add)
 }
 
 # drop the addresses we've already processed to slim down df
 df <- df[!(geo_address %in% addresses)]
-cat(glue('\n\nRUNNING FULL DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
-texts <- df$dupeText
-results <- mclapply(1:length(texts), jaccard_parallel, texts = texts, thresh = thresh)
-cat('\n\nPROCESSING RESULTS\n')
-keep_list <- sapply(1:length(results), deduped_list, results = results)
-deduped_df <- rbind(deduped_df, df[keep_list])
+cat(glue('\n\nRUNNING TRACT DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
+tracts <- df[, .N, by=.(geoid)]
+tracts <- tracts[N>10 & !is.na(geoid)]$geoid
+for(i in 1:length(tracts)){
+  focal_tract <- tracts[i]
+  tracts_df <- df[geoid == focal_tract]
+  cat(glue('\n\nRUNNING DEDPULICATION ON {nrow(tracts_df)} rows from {focal_tract}\n\n'))
+  to_add <- recursive_dedupe(tracts_df, thresh)
+  deduped_df <- rbind(deduped_df, to_add)
+}
+
+df <- df[!(geoid %in% tracts)]
+cat(glue('\n\nRUNNING FINAL DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
+to_add <- recursive_dedupe(df, thresh)
+deduped_df <- rbind(deduped_df, to_add)
 
 cat(glue("\nProcessing complete, sucessfully dropped {orig_rows - nrow(deduped_df)} rows\n\n WRITING FILE"))
 
