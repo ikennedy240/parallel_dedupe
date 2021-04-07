@@ -24,8 +24,31 @@ for(focal_cbsa in cbsas){
   # reads in the base_submit.slurm
   file.copy('base_submit.slurm', slurm_path, overwrite = TRUE)
   # modifies it for the current CBSA
-  slurm_lines <- glue('Rscript parallel_dedupe.R {cbsa_in_path} {cbsa_out_path} .7 >> dedupe_log_{focal_cbsa}.txt\n\nexit 0')
-  writeLines(slurm_lines, slurm_path, append = TRUE)
+  job_name <- glue('cl_dedupe_{focal_cbsa}')
+  slurm_lines <- glue('#!/bin/bash
+  
+## Job Name
+#SBATCH --job-name={job_name}
+
+## Partition and Allocation
+#SBATCH -p stf\n#SBATCH -A stf
+
+## Resources
+#SBATCH --nodes=1
+#SBATCH --time=48:00:00
+#SBATCH --ntasks=27
+#SBATCH --mem=100G
+
+## specify the working directory for this job
+#SBATCH --chdir=.
+
+## Import any modules here
+module load r_3.6.0
+
+## scripts to be executed hereRscript parallel_dedupe.R {cbsa_in_path} {cbsa_out_path} .7 >> dedupe_log_{focal_cbsa}.txt
+
+exit 0')
+  write(slurm_lines, slurm_path, append = FALSE)
   # submits it to the slurm queue
   system(glue('sbatch {slurm_path}'))
 }

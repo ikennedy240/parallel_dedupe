@@ -59,7 +59,7 @@ recursive_dedupe <- function(df, thresh, cutoff = 500, tmp_file = 'tmp/tmp.csv')
     short_df <- recursive_dedupe(to_run, thresh)
     print(glue("SHORT DF SIZE IS {nrow(short_df)}"))
     # if the deduped one is close to the cutoff, save it for now
-    if(nrow(short_df)>=(cutoff-2)){
+    if(nrow(short_df)>=(cutoff*.9)){
       print("SHORT DF IS BLOATED, WRITING TO FILE")
       fwrite(short_df, tmp_file, append = TRUE)
       # then df just loses cutoff rows
