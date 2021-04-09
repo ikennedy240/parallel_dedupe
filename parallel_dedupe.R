@@ -27,7 +27,7 @@ if(length(args)>3){
 cat(glue("Reading file from {in_path}\nWriting file to {out_path}\nUsing threshold:{thresh} and reading {n_rows} rows\n"))
 
 cat('\n\nREADING DATA\n')
-df <- fread(in_path, nrows = n_rows)
+df <- fread(in_path, nrows = n_rows, colClasses = 'character')
 orig_rows <- nrow(df)
 ## function that calcs jaccard with all
 jaccard_parallel <- function(i, texts, thresh){
@@ -76,7 +76,7 @@ recursive_dedupe <- function(df, thresh, cutoff = 500, tmp_file = 'tmp/tmp.csv')
   # if we had saved a short df of deduped stuff, now bind it back on
   if(exists('short_df') & file.exists(tmp_file)){
     print("RELOADING SHORT DF TO RETURN")
-    df <- rbind(df, fread(tmp_file))
+    df <- rbind(df, fread(tmp_file), colClasses = 'caracter')
     file.remove(tmp_file)
   }
   return(df)
@@ -86,12 +86,20 @@ cbsa <- unique(df$cbsa)
 cat(glue('\n\nRUNNING ADDRESS DEDPULICATION ON {nrow(df)} rows from {cbsa}\n'))
 deduped_df <- data.table()
 addresses <- df[, .N, by=.(geo_address)]
-addresses <- addresses[N>10 & !is.na(geo_address)]$geo_address
+addresses <- addresses[N>10 & !is.na(geo_address) & geo_address!='']$geo_address
+
+# make the cbsa tmp directory if it doesn't exist, otherwise make sure it's cleaned out
+if(!dir.exists(glue('tmp/{cbsa}'))){
+  dir.create(glue('tmp/{cbsa}'))
+} else {
+  file.remove(glue('tmp/{cbsa}/*'))
+}
+
 
 for(focal_address in addresses){
   addr_df <- df[geo_address == focal_address]
   cat(glue('\n\nRUNNING DEDPULICATION ON {nrow(addr_df)} rows from {focal_address}\n\n'))
-  to_add <- recursive_dedupe(addr_df, thresh)
+  to_add <- recursive_dedupe(addr_df, thresh, tmp_file = glue('tmp/{cbsa}/{focal_address}.csv'))
   deduped_df <- rbind(deduped_df, to_add)
 }
 
