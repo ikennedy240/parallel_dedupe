@@ -76,7 +76,7 @@ recursive_dedupe <- function(df, thresh, cutoff = 500, tmp_file = 'tmp/tmp.csv')
   # if we had saved a short df of deduped stuff, now bind it back on
   if(exists('short_df') & file.exists(tmp_file)){
     print("RELOADING SHORT DF TO RETURN")
-    df <- rbind(df, fread(tmp_file), colClasses = 'caracter')
+    df <- rbind(df, fread(tmp_file, colClasses = 'caracter'))
     file.remove(tmp_file)
   }
   return(df)
@@ -89,16 +89,16 @@ addresses <- df[, .N, by=.(geo_address)]
 addresses <- addresses[N>10 & !is.na(geo_address) & geo_address!='']$geo_address
 
 # make the cbsa tmp directory if it doesn't exist, otherwise make sure it's cleaned out
-if(!dir.exists(glue('tmp/{cbsa}'))){
-  dir.create(glue('tmp/{cbsa}'))
-} else {
-  file.remove(glue('tmp/{cbsa}/*'))
+tmp_dr <- glue('tmp/{cbsa}')
+if(!dir.exists(tmp_dr)){
+  dir.create(tmp_dr)
 }
 
 
 for(focal_address in addresses){
   addr_df <- df[geo_address == focal_address]
   cat(glue('\n\nRUNNING DEDPULICATION ON {nrow(addr_df)} rows from {focal_address}\n\n'))
+  file.remove(glue('{tmp_dr}/{focal_address}.csv'))
   to_add <- recursive_dedupe(addr_df, thresh, tmp_file = glue('tmp/{cbsa}/{focal_address}.csv'))
   deduped_df <- rbind(deduped_df, to_add)
 }

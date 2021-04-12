@@ -4,10 +4,20 @@ library(glue)
 args <- commandArgs(trailingOnly=TRUE)
 in_path <- args[1]
 
-print(glue("Preparing to read data from {in_path}")) 
-
-df <- fread(in_path)
-cbsas <- unique(df$cbsafp)
+if(length(args)>1){
+  mode <- args[2]
+}
+print(mode)
+if(mode == 'script'){
+  print('Reading CBSA data from files, then running slurm scripts')
+  files <- list.files('raw_data')  
+  cbsas <- substr(files, 5,9)
+  print(cbsas)
+} else {
+   print(glue("Preparing to read data from {in_path}")) 
+   df <- fread(in_path)
+   cbsas <- unique(df$cbsafp)
+}
 # loops through CBSAs
 for(focal_cbsa in cbsas){
   print(glue('Preparing cbsa {focal_cbsa}'))
@@ -61,4 +71,4 @@ exit 0')
   write(slurm_lines, slurm_path, append = FALSE)
   # submits it to the slurm queue
   system(glue('sbatch {slurm_path}'))
-}}
+}
